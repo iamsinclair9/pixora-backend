@@ -1,41 +1,43 @@
-FROM php:8.3-fpm-alpine
+# Production stage
+FROM php:8.3-fpm
 
-# Install system dependencies
-RUN apk add --no-cache \
-    nginx \
+RUN apt-get update && apt-get install -y \
     libpng-dev \
-    libwebp-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
-    postgresql-dev \
-    zip \
-    unzip \
-    git \
-    supervisor
+    libjpeg-dev \
+    libfreetype6-dev \
+    libzip-dev \
+    libonig-dev \
+    libxml2-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip opcache \
+    && pecl install redis \
+    && docker-php-ext-enable redis opcache \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp
-RUN docker-php-ext-install pdo pdo_pgsql pdo_mysql gd bcmath
-
-# Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Set working directory
-WORKDIR /var/www/html
+WORKDIR /var/www
 
-# Copy project files
-COPY . .
+COPY . /var/www
+COPY .env.ci .env
+COPY backup.txt composer.json
 
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+ENV COMPOSER_ALLOW_SUPERUSER=1
 
-# Configure Nginx & PHP-FPM
-COPY docker/nginx.conf /etc/nginx/nginx.conf
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY --chown=www-data:www-data . /var/www
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+RUN composer install --no-scripts --no-autoloader
 
-EXPOSE 80
+RUN chown -R www-data:www-data /var/www/storage \
+    && chmod -R 775 /var/www/storage
 
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+RUN composer dump-autoload --optimize
+
+RUN chown -R www-data:www-data /var/www
+
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+
+COPY php.ini $PHP_INI_DIR/conf.d/
+
+EXPOSE 9000
+CMD ["php-fpm"]

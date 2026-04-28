@@ -1,0 +1,39 @@
+services:
+  webserver:
+    image: brightwebb11/webserver:latest
+    container_name: webserver
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - app-network
+
+  app:
+    image: brightwebb11/app:latest
+    container_name: app
+    environment:
+      SERVICE_NAME: app
+      SERVICE_TAGS: dev
+    volumes:
+      - .:/var/www
+    networks:
+      - app-network
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: unless-stopped
+    networks:
+      - app-network
+    ports:
+      - "6379:6379" 
+
+networks:
+  app-network:
+    driver: bridge
