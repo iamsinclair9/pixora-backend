@@ -1,55 +1,46 @@
-
-# Production stage
 FROM php:8.3-fpm
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
+    git \
+    curl \
     libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    libzip-dev \
     libonig-dev \
     libxml2-dev \
-    libftp-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip ftp opcache \
-    && pecl install redis \
-    && docker-php-ext-enable redis opcache
+    libzip-dev \
+    zip \
+    unzip \
+    && docker-php-ext-configure gd \
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-    RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install Redis extension
+RUN pecl install redis && docker-php-ext-enable redis
 
-    # Install PHP extensions
-    RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd ftp
-    # Install Redis extension
-    RUN pecl list | grep redis > /dev/null || pecl install redis
-    RUN docker-php-ext-enable redis
+# Get latest Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-    COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Set working directory
+WORKDIR /var/www
 
-    WORKDIR /var/www
+# Copy composer files first to leverage Docker cache
+COPY composer.json composer.lock* ./
 
-    COPY . /var/www
-    COPY .env.ci .env
-    COPY backup.txt composer.json
+# Install dependencies (no scripts/autoloader yet)
+# We use --no-dev for production, remove it if you need dev dependencies in the image
+RUN composer install --no-scripts --no-autoloader --no-dev
 
-    ENV COMPOSER_ALLOW_SUPERUSER=1
+# Copy the rest of the application
+COPY . .
 
-    COPY --chown=www-data:www-data . /var/www
-    # Install application dependencies
-    RUN composer install --no-scripts --no-autoloader
+# Generate optimized autoload files
+RUN composer dump-autoload --optimize
 
-    RUN chown -R www-data:www-data /var/www/storage \
-        && chmod -R 775 /var/www/storage
-    
-    # Generate optimized autoload files
-    RUN composer dump-autoload --optimize
+# Set correct permissions for Laravel
+RUN chown -R www-data:www-data /var/www \
+    && chmod -R 775 /var/www/storage \
+    && chmod -R 775 /var/www/bootstrap/cache
 
-    RUN chown -R www-data:www-data /var/www
+EXPOSE 9000
 
-    # PHP INI for production
-    RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
-
-    # Add custom php.ini settings
-    COPY php.ini $PHP_INI_DIR/conf.d/
-
-    EXPOSE 9000
-    CMD ["php-fpm"]
+CMD ["php-fpm"]
