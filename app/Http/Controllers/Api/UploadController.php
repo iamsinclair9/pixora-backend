@@ -58,6 +58,10 @@ class UploadController extends Controller
         // When deploying, switch FILESYSTEM_DISK=s3 in .env and nothing else changes.
         $disk = config('filesystems.default', 'public');
         $path = $request->file('image')->store('images', $disk);
+        
+        if (!$path) {
+            return response()->json(['message' => 'Failed to store image on disk.'], 500);
+        }
 
         // Build a clean public URL for the stored file.
         // - public disk  → /storage/images/xxx.jpg  (served via storage:link)

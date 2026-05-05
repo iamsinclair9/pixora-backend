@@ -49,34 +49,34 @@ class Image extends Model
      * Works for both local/public disk and S3.
      */
     public function getImageUrlAttribute(): string
-{
-    if ($this->cdn_url && str_starts_with($this->cdn_url, 'http')) {
-        return $this->cdn_url;
+    {
+        if ($this->cdn_url && str_starts_with($this->cdn_url, 'http')) {
+            return $this->cdn_url;
+        }
+
+        if (empty($this->file_path)) {
+            return '';
+        }
+
+        $disk = config('filesystems.default', 'public');
+        return Storage::disk($disk)->url($this->file_path);
     }
 
-    if (!$this->file_path) {
-        return '';  // or a default placeholder URL
+    public function getThumbnailUrlAttribute(): string
+    {
+        $path = $this->thumbnail_path ?: $this->file_path;
+
+        if (empty($path)) {
+            return '';
+        }
+
+        if (str_starts_with($path, 'http')) {
+            return $path;
+        }
+
+        $disk = config('filesystems.default', 'public');
+        return Storage::disk($disk)->url($path);
     }
-
-    $disk = config('filesystems.default', 'public');
-    return Storage::disk($disk)->url($this->file_path);
-}
-
-public function getThumbnailUrlAttribute(): string
-{
-    $path = $this->thumbnail_path ?: $this->file_path;
-
-    if (!$path) {
-        return '';  // or a default placeholder URL
-    }
-
-    if (str_starts_with($path, 'http')) {
-        return $path;
-    }
-
-    $disk = config('filesystems.default', 'public');
-    return Storage::disk($disk)->url($path);
-}
 
     // ─────────────────────────────────────────────
     //  Relationships
